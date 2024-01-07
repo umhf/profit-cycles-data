@@ -180,12 +180,14 @@ for pattern in patterns:
 
 #patterns = [serialize_pattern(pattern) for pattern in best_patterns.values()]
 
+import os
+
 def connect_db():
     return psycopg2.connect(
-        dbname="marinaschmid", 
-        user="marinaschmid", 
-        password="", 
-        host="localhost"
+        dbname=os.environ.get('DB_NAME', 'marinaschmid'), 
+        user=os.environ.get('DB_USER', 'marinaschmid'), 
+        password=os.environ.get('DB_PASSWORD', ''), 
+        host=os.environ.get('DB_HOST', 'localhost')
     )
 
 
