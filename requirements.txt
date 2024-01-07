@@ -1,0 +1,4 @@
+pandas
+yfinance
+psycopg2
+requests-html
