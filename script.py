@@ -106,8 +106,8 @@ def get_yearly_details(data, start_date, end_date):
 #tickers = ['GC=F', 'SI=F', 'PL=F', 'HG=F', 'CL=F', 'HO=F', 'RB=F', 'NG=F', 'ZC=F', 'ZW=F', 'ZS=F', 'ZM=F', 'ZL=F', 'CC=F', 'CT=F', 'KC=F', 'SB=F', 'LE=F', 'HE=F', '6A=F', '6B=F', '6C=F', '6E=F', '6J=F', '6S=F']
 import pandas as pd
 import yfinance as yf
-tickers = ['GC=F', 'SI=F', 'PL=F', 'HG=F', 'CL=F', 'HO=F', 'RB=F', 'NG=F', 'ZC=F', 'ZW=F', 'ZS=F', 'ZM=F', 'ZL=F', 'CC=F', 'CT=F', 'KC=F', 'SB=F', 'LE=F', 'HE=F']
-#tickers = ['RB=F']
+#tickers = ['GC=F', 'SI=F', 'PL=F', 'HG=F', 'CL=F', 'HO=F', 'RB=F', 'NG=F', 'ZC=F', 'ZW=F', 'ZS=F', 'ZM=F', 'ZL=F', 'CC=F', 'CT=F', 'KC=F', 'SB=F', 'LE=F', 'HE=F']
+tickers = ['RB=F']
 
 """Analysis"""
 
