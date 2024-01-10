@@ -97,15 +97,18 @@ def get_yearly_details(data, start_date, end_date):
     return details
 
 # Modified function to backtest patterns for the entire previous year
-def backtest_patterns(patterns, data_for_year, year):
+def backtest_patterns(patterns, data_for_year, year, trade_amount, initial_capital):
     backtest_results = []
+    total_return_dollar = 0
+    capital = initial_capital
     for pattern in patterns:
         ticker = pattern['ticker']
         pattern_type = pattern['pattern_type']
         stock_data = data_for_year.get(ticker)
 
-        if stock_data is None or stock_data.empty:
-            continue  # Skip if no data available for this ticker
+        if stock_data is None or stock_data.empty or capital < trade_amount:
+            continue  # Skip if no data or not enough capital
+
 
         # Convert pattern dates to the backtest year
         start_date = pattern['start_date'].replace(year=year)
@@ -133,18 +136,20 @@ def backtest_patterns(patterns, data_for_year, year):
             profit = 0  # No profit for undefined pattern types
 
         profit_percent = (profit / start_price) * 100 if start_price != 0 else 0
-
+        trade_return = trade_amount * (profit_percent / 100)
+        capital += trade_return
+        total_return_dollar += trade_return
         backtest_results.append({
             'ticker': ticker,
             'start_date': start_date.strftime('%Y-%m-%d'),
             'end_date': end_date.strftime('%Y-%m-%d'),
             'start_price': start_price,
             'end_price': end_price,
-            'return_dollar': profit,
+            'return_dollar': trade_return,
             'return_percent': profit_percent
         })
 
-    return backtest_results
+    return backtest_results, total_return_dollar, capital
 
 
 
@@ -162,6 +167,13 @@ def serialize_pattern(pattern):
 
 def download_and_process_data(year):
     tickers = ['GC=F', 'SI=F', 'PL=F', 'HG=F', 'CL=F', 'HO=F', 'RB=F', 'NG=F', 'ZC=F', 'ZW=F', 'ZS=F', 'ZM=F', 'ZL=F']
+    # GET S&P500
+    # Fetch S&P 500 tickers
+    # export SSL_CERT_FILE=$(python -m certifi)
+    sp500_url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+    sp500_table = pd.read_html(sp500_url, header=0)[0]
+    sp500_tickers = sp500_table['Symbol'].tolist()
+    tickers = [ticker.replace('.', '-') for ticker in sp500_tickers]
     patterns = []
 
     for ticker in tickers:
@@ -229,7 +241,7 @@ def download_data_for_year(tickers, year):
 
 
 # Print results using PrettyTable
-def print_results(backtest_results):
+def print_results_and_summary(backtest_results, total_return, final_capital):
     table = PrettyTable()
     table.field_names = ["Ticker", "Start Date", "End Date", "Start Price", "End Price", "Return ($)", "Return (%)"]
 
@@ -245,16 +257,50 @@ def print_results(backtest_results):
         ])
 
     print(table)
+    print(f"\nSummary:")
+    print(f"Total Return for the Year: ${total_return:.2f}")
+    print(f"Final Capital: ${final_capital:.2f}")
+
+
+def filter_patterns(patterns):
+    # Sort patterns by ticker, start date, and end date
+    patterns.sort(key=lambda x: (x['ticker'], x['start_date'], x['end_date']))
+
+    filtered_patterns = []
+    prev_pattern = None
+
+    for pattern in patterns:
+        if prev_pattern and pattern['ticker'] == prev_pattern['ticker']:
+            # Check if the start dates are adjacent or end dates are the same
+            start_dates_adjacent = (pattern['start_date'] - prev_pattern['start_date']).days <= 1
+            end_dates_same = pattern['end_date'] == prev_pattern['end_date']
+
+            if start_dates_adjacent or end_dates_same:
+                # Keep the more profitable pattern
+                if pattern['average_return_percent'] > prev_pattern['average_return_percent']:
+                    prev_pattern = pattern
+                continue
+        filtered_patterns.append(pattern)
+        prev_pattern = pattern
+
+    return filtered_patterns
+
 
 
 # Local testing harness
 if __name__ == "__main__":
     # Main function and testing harness
-    year_to_process = 2022  # Example year
-    best_patterns = download_and_process_data(year_to_process)
+    year_to_process = 2021  # Example year
+    best_patterns_dict = download_and_process_data(year_to_process)
 
-    # Correctly extract tickers from the values of the best_patterns dictionary
-    tickers = [pattern['ticker'] for pattern in best_patterns.values()]
+    # Convert the dictionary values to a list for filtering
+    best_patterns_list = list(best_patterns_dict.values())
+
+    # Apply the filter to the list of patterns
+    filtered_patterns = filter_patterns(best_patterns_list)
+
+    # Extract tickers from the filtered patterns
+    tickers = [pattern['ticker'] for pattern in filtered_patterns]
     tickers = list(set(tickers))  # Remove duplicates
 
     # Download data for backtesting year
@@ -262,9 +308,13 @@ if __name__ == "__main__":
     data_for_backtest_year = download_data_for_year(tickers, backtest_year)
 
     # Backtest patterns
-    backtest_results = backtest_patterns(best_patterns.values(), data_for_backtest_year, backtest_year)
+    initial_capital = 25000
+    trade_amount = 1000
+    backtest_results, total_return, final_capital = backtest_patterns(
+        filtered_patterns, data_for_backtest_year, backtest_year, trade_amount, initial_capital)
 
-    # Print results using the new function
-    print_results(backtest_results)
+    # Print results and summary
+    print_results_and_summary(backtest_results, total_return, final_capital)
+
 
 
