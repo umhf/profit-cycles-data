@@ -3,6 +3,7 @@ import os
 print("Credentials Path:", os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
 # export GOOGLE_APPLICATION_CREDENTIALS="/Users/marinaschmid/Library/CloudStorage/GoogleDrive-schmid.squad@gmail.com/My Drive/Trading/profit-cycles-185eecd0c62f.json"
 
+
 import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
