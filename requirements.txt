@@ -1,4 +1,3 @@
-pandas
+google-cloud-firestore
 yfinance
-psycopg2
-requests-html
+pandas
