@@ -14,8 +14,8 @@ from utils.processing import readFromFile, saveToFile, adjust_cross_year_date, g
 
 
 # Constants
-MIN_DAYS = 20
-MAX_DAYS = 60
+MIN_DAYS = 14
+MAX_DAYS = 30
 YEARS_BACK = 10
 
 # Function to analyze a pattern and determine if it's bullish or bearish
@@ -51,7 +51,6 @@ def analyze_pattern(data, start_date, end_date):
     else:
         return 'None'
 
-# Modified function to backtest patterns for the entire previous year
 def backtest_patterns(patterns, data_for_year, year, trade_amount, initial_capital):
     backtest_results = []
     total_return_dollar = 0
@@ -66,8 +65,6 @@ def backtest_patterns(patterns, data_for_year, year, trade_amount, initial_capit
         if stock_data is None or stock_data.empty or capital < trade_amount:
             continue  # Skip if no data or not enough capital
 
-
-
         # Adjust dates for leap year
         start_date = adjust_cross_year_date(pattern['start_date'], year)
         end_date = adjust_cross_year_date(pattern['end_date'], year)
@@ -78,23 +75,26 @@ def backtest_patterns(patterns, data_for_year, year, trade_amount, initial_capit
         if start_date not in stock_data.index or end_date not in stock_data.index:
             continue  # Skip if dates are not in the dataset
 
-        start_price = stock_data.at[start_date, 'Adj Close']
-        end_price = stock_data.at[end_date, 'Adj Close']
+        # Calculate the max rise and max drop
+        period_data = stock_data.loc[start_date:end_date, 'Adj Close']
+        max_price = period_data.max()
+        min_price = period_data.min()
+        start_price = period_data.iloc[0]
+        end_price = period_data.iloc[-1]
 
-        if pattern_type == 'bullish':
-            profit = end_price - start_price
-        elif pattern_type == 'bearish':
-            # For bearish patterns, profit is calculated differently
-            profit = start_price - end_price
-        else:
-            profit = 0  # No profit for undefined pattern types
+        max_rise_percent = ((max_price - start_price) / start_price) * 100 if start_price != 0 else 0
+        max_drop_percent = ((start_price - min_price) / start_price) * 100 if start_price != 0 else 0
 
+        # Calculate profit and profit percent
+        profit = end_price - start_price if pattern_type == 'bullish' else start_price - end_price
         profit_percent = (profit / start_price) * 100 if start_price != 0 else 0
+
         trade_return = trade_amount * (profit_percent / 100)
         if trade_return != 0:  # Check to avoid counting non-trades
             num_trades += 1
             capital += trade_return
             total_return_dollar += trade_return
+
         backtest_results.append({
             'ticker': ticker,
             'start_date': start_date.strftime('%Y-%m-%d'),
@@ -102,10 +102,14 @@ def backtest_patterns(patterns, data_for_year, year, trade_amount, initial_capit
             'start_price': start_price,
             'end_price': end_price,
             'return_dollar': trade_return,
-            'return_percent': profit_percent
+            'return_percent': profit_percent,
+            'max_rise_percent': max_rise_percent,
+            'max_drop_percent': max_drop_percent,
+            'yearly_details': pattern['yearly_details']
         })
 
     return backtest_results, total_return_dollar, capital, num_trades
+
 
 
 
@@ -238,44 +242,49 @@ if __name__ == "__main__":
     sp500_url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
     sp500_table = pd.read_html(sp500_url, header=0)[0]
     sp500_tickers = sp500_table['Symbol'].tolist()
-    tickers = [ticker.replace('.', '-') for ticker in sp500_tickers]
+
+
     year_to_process = 2023  # Example year
 
 
-    useFile = True
 
-    if useFile:
-        best_patterns_dict = readFromFile(year_to_process)
-    else:
-        best_patterns_dict = download_and_process_data(tickers, year_to_process)
+    for year_to_process in range(2016, 2024):  # 2023 is exclusive, so it will loop until 2022
 
-        saveToFile(best_patterns_dict, year_to_process)
+        tickers = [ticker.replace('.', '-') for ticker in sp500_tickers]
+        useFile = False
+
+        if useFile:
+            best_patterns_dict = readFromFile(year_to_process)
+        else:
+            best_patterns_dict = download_and_process_data(tickers, year_to_process)
+
+            saveToFile(best_patterns_dict, year_to_process)
 
 
 
-    # Convert the dictionary values to a list for filtering
-    best_patterns_list = list(best_patterns_dict.values())
+        # Convert the dictionary values to a list for filtering
+        best_patterns_list = list(best_patterns_dict.values())
 
-    # Apply the filter to the list of patterns
-    filtered_patterns = filter_patterns(best_patterns_list)
-    filtered_patterns = filter_30_day_best_patterns(filtered_patterns)
+        # Apply the filter to the list of patterns
+        filtered_patterns = filter_patterns(best_patterns_list)
+        filtered_patterns = filter_30_day_best_patterns(filtered_patterns)
 
-    # Extract tickers from the filtered patterns
-    tickers = [pattern['ticker'] for pattern in filtered_patterns]
-    tickers = list(set(tickers))  # Remove duplicates
+        # Extract tickers from the filtered patterns
+        tickers = [pattern['ticker'] for pattern in filtered_patterns]
+        tickers = list(set(tickers))  # Remove duplicates
 
-    # Download data for backtesting year
-    backtest_year = year_to_process
-    data_for_backtest_year = download_data_for_year(tickers, backtest_year)
+        # Download data for backtesting year
+        data_for_backtest_year = download_data_for_year(tickers, year_to_process)
 
-    # Backtest patterns
-    initial_capital = 25000
-    trade_amount = 1000
-    backtest_results, total_return, final_capital, num_trades = backtest_patterns(
-    filtered_patterns, data_for_backtest_year, backtest_year, trade_amount, initial_capital)
+        # Backtest patterns
+        initial_capital = 25000
+        trade_amount = 1000
+        backtest_results, total_return, final_capital, num_trades = backtest_patterns(
+        filtered_patterns, data_for_backtest_year, year_to_process, trade_amount, initial_capital)
 
-    saveToLocalCSVBacktesting(backtest_results, year_to_process)
-    print_results_and_summary(backtest_results, total_return, final_capital, num_trades, initial_capital)
+        saveToLocalCSVBacktesting(backtest_results, year_to_process)
+
+    #print_results_and_summary(backtest_results, total_return, final_capital, num_trades, initial_capital)
 """     from utils.processing import saveToGoogle
     saveToGoogle(backtest_results, str(backtest_year)) """
     

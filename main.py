@@ -147,7 +147,7 @@ if __name__ == "__main__":
     sp500_table = pd.read_html(sp500_url, header=0)[0]
     sp500_tickers = sp500_table['Symbol'].tolist()
     tickers = [ticker.replace('.', '-') for ticker in sp500_tickers]
-    tickers = ['MAR','ATO','AON']
+    #tickers = ['MAR','ATO','AON']
 
 
 

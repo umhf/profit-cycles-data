@@ -1,2 +1,5 @@
 # .gitignore
 app.yaml
+credentials/
+*.csv
+*.pkl

@@ -218,7 +218,7 @@ def saveToLocalCSVBacktesting(patterns, year=None):
         csv_filename = f'backtesting_{year}.csv'
 
     # Define the header of the CSV file
-    header = ["Ticker", "Start Date", "End Date", "Start Price", "End Price", "Return ($)", "Return (%)"]
+    header = ["Ticker", "Start Date", "End Date", "Start Price", "End Price", "Return ($)", "Return (%)", "Max Rise (%)", "Max Drop (%)", "Yearly Details"]
 
     # Open the file in write mode and create a csv writer object
     with open(csv_filename, mode='w', newline='') as file:
@@ -236,8 +236,11 @@ def saveToLocalCSVBacktesting(patterns, year=None):
                 round(pattern['start_price'], 2),
                 round(pattern['end_price'], 2),
                 round(pattern['return_dollar'], 2),
-                round(pattern['return_dollar'], 2),
-                pattern['return_percent']
+                round(pattern['return_percent'], 2),
+                round(pattern['max_rise_percent'], 2),
+                round(pattern['max_drop_percent'], 2),
+                pattern['yearly_details']
+
             ]
             writer.writerow(row)
 
