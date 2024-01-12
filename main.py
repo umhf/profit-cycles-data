@@ -8,27 +8,13 @@ import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
 from google.cloud import firestore
+from utils.processing import readFromFile, saveToFile, adjust_cross_year_date, get_yearly_details, serialize_pattern, filter_patterns, saveToLocalCSV, filter_30_day_best_patterns
 
 # Constants
 MIN_DAYS = 20
 MAX_DAYS = 60
-LOOK_AHEAD_DAYS = 100
+LOOK_AHEAD_DAYS = 365
 YEARS_BACK = 10
-
-# Helper function definitions
-# Function to safely adjust date for cross-year patterns
-def adjust_cross_year_date(date, year):
-    try:
-        new_date = date.replace(year=year)
-    except ValueError:
-        # Handle February 29th in leap years by moving to the last day of February
-        if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0):
-            # Leap year
-            new_date = date.replace(year=year, day=29)
-        else:
-            # Non-leap year
-            new_date = date.replace(year=year, day=28)
-    return new_date
 
 # Function to analyze a pattern and determine if it's bullish or bearish
 def analyze_pattern(data, start_date, end_date):
@@ -56,67 +42,22 @@ def analyze_pattern(data, start_date, end_date):
     # Determine if the pattern is consistently bullish or bearish
     if bullish_years == YEARS_BACK or bearish_years == YEARS_BACK:
         return ['10/10', 'bullish' if bullish_years == YEARS_BACK else 'bearish']
-    elif bullish_years == YEARS_BACK - 1 or bearish_years == YEARS_BACK - 1:
-        return ['9/10', 'bullish' if bullish_years == YEARS_BACK - 1 else 'bearish']
     else:
         return 'None'
+    """ elif bullish_years == YEARS_BACK - 1 or bearish_years == YEARS_BACK - 1:
+        return ['9/10', 'bullish' if bullish_years == YEARS_BACK - 1 else 'bearish'] """
 
 
-# Function to get yearly details of a pattern
-def get_yearly_details(data, start_date, end_date):
-    details = []
-    for year in range(start_date.year - YEARS_BACK, start_date.year):
-        yearly_start_date = adjust_cross_year_date(start_date, year)
-        yearly_end_date = adjust_cross_year_date(end_date, year)
 
-        if yearly_end_date < yearly_start_date:
-            yearly_end_date = adjust_cross_year_date(end_date, year + 1)
-
-        if yearly_start_date in data.index and yearly_end_date in data.index:
-            start_price = data.at[yearly_start_date, 'Adj Close']
-            end_price = data.at[yearly_end_date, 'Adj Close']
-            profit = end_price - start_price
-            profit_percent = (profit / start_price) * 100
-            max_price = data.loc[yearly_start_date:yearly_end_date, 'Adj Close'].max()
-            min_price = data.loc[yearly_start_date:yearly_end_date, 'Adj Close'].min()
-            max_rise_percent = ((max_price - start_price) / start_price) * 100
-            max_drop_percent = ((start_price - min_price) / start_price) * 100
-
-            details.append({
-                'year': year,
-                'start_date': yearly_start_date,
-                'end_date': yearly_end_date,
-                'start_price': start_price,
-                'end_price': end_price,
-                'profit': profit,
-                'profit_percent': profit_percent,
-                'max_rise_percent': max_rise_percent,
-                'max_drop_percent': max_drop_percent
-            })
-    return details
 
 
 
 import json
 
-def serialize_pattern(pattern):
-    # Convert pattern dates to string format
-    serialized_pattern = pattern.copy()
-    serialized_pattern['start_date'] = pattern['start_date'].strftime('%Y-%m-%d')
-    serialized_pattern['end_date'] = pattern['end_date'].strftime('%Y-%m-%d')
-    for detail in serialized_pattern['yearly_details']:
-        detail['start_date'] = detail['start_date'].strftime('%Y-%m-%d')
-        detail['end_date'] = detail['end_date'].strftime('%Y-%m-%d')
-    return serialized_pattern
-def download_and_process_data():
-    tickers = ['GC=F', 'SI=F', 'PL=F', 'HG=F', 'CL=F', 'HO=F', 'RB=F', 'NG=F', 'ZC=F', 'ZW=F', 'ZS=F', 'ZM=F', 'ZL=F', 'CC=F', 'CT=F', 'KC=F', 'SB=F', 'LE=F', 'HE=F', '6A=F', '6B=F', '6C=F', '6E=F', '6J=F', '6S=F']
-    #tickers = ['GC=F', 'SI=F', 'PL=F', 'HG=F', 'CL=F', 'HO=F', 'RB=F', 'NG=F', 'ZC=F', 'ZW=F', 'ZS=F', 'ZM=F', 'ZL=F', 'CC=F', 'CT=F', 'KC=F', 'SB=F', 'LE=F', 'HE=F']
-    # tickers = ['RB=F']
 
-
+def download_and_process_data(tickers):
     patterns = []
     for ticker in tickers:
-
         try:
             print(f"Processing {ticker}...")
             stock_data = yf.download(ticker, period="max")
@@ -139,9 +80,8 @@ def download_and_process_data():
                         break
                     pattern_type = analyze_pattern(stock_data, start_date, end_date)
                     if pattern_type not in ['None']:
-                        yearly_details = get_yearly_details(stock_data, start_date, end_date)
+                        yearly_details = get_yearly_details(stock_data, start_date, end_date, YEARS_BACK)
                         average_return = sum([d['profit_percent'] if pattern_type[1] == 'bullish' else -d['profit_percent'] for d in yearly_details]) / len(yearly_details)
-                        #average_return = sum([d['profit_percent'] for d in yearly_details]) / len(yearly_details)
                         patterns.append({
                             'ticker': ticker,
                             'name': stock_name,
@@ -169,10 +109,8 @@ def download_and_process_data():
         else:
             best_patterns[key] = pattern
 
-    # Serialize and convert best patterns to JSON
-    json_data = [serialize_pattern(pattern) for pattern in best_patterns.values()]
-    #json_output = json.dumps(json_data, indent=4)
-    return json_data
+   
+    return best_patterns
 
 # Write to a file
 """ with open('stock_patterns.json', 'w') as file:
@@ -188,14 +126,47 @@ def upload_to_firestore(json_data):
         # Set the document with the data
         doc_ref.set(item)
 
-def main(event, context):
-    json_data = download_and_process_data()
-    # Call the upload function
-    upload_to_firestore(json_data)
-
-    print(f"This function was triggered by messageId {context.event_id} published at {context.timestamp}")
 
 # Local testing harness
 if __name__ == "__main__":
-    json_data = download_and_process_data()
-    upload_to_firestore(json_data)
+    # Main function and testing harness
+    # tickers = ['GC=F', 'SI=F', 'PL=F', 'HG=F', 'CL=F', 'HO=F', 'RB=F', 'NG=F', 'ZC=F', 'ZW=F', 'ZS=F', 'ZM=F', 'ZL=F']
+    #tickers = ['GC=F', 'SI=F', 'PL=F', 'HG=F', 'CL=F', 'HO=F', 'RB=F', 'NG=F', 'ZC=F', 'ZW=F', 'ZS=F', 'ZM=F', 'ZL=F', 'CC=F', 'CT=F', 'KC=F', 'SB=F', 'LE=F', 'HE=F', '6A=F', '6B=F', '6C=F', '6E=F', '6J=F', '6S=F']
+    # GET S&P500
+    # Fetch S&P 500 tickers
+    import os
+    import subprocess
+    #export SSL_CERT_FILE=$(python -m certifi) to a python script
+    # Get the path to the certificate file using Python's subprocess module
+    cert_file = subprocess.check_output(["python3", "-m", "certifi"]).strip().decode()
+    # Set the SSL_CERT_FILE environment variable
+    os.environ["SSL_CERT_FILE"] = cert_file
+
+
+    sp500_url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+    sp500_table = pd.read_html(sp500_url, header=0)[0]
+    sp500_tickers = sp500_table['Symbol'].tolist()
+    tickers = [ticker.replace('.', '-') for ticker in sp500_tickers]
+    tickers = ['MAR','ATO','AON']
+
+
+
+    best_patterns_dict = download_and_process_data(tickers)
+
+        #saveToFile(best_patterns_dict, year_to_process)
+
+
+
+    # Convert the dictionary values to a list for filtering
+    best_patterns_list = list(best_patterns_dict.values())
+
+    # Apply the filter to the list of patterns
+    filtered_patterns = filter_patterns(best_patterns_list)
+    filtered_patterns = filter_30_day_best_patterns(filtered_patterns)
+    
+    saveToLocalCSV(filtered_patterns)
+
+     # Serialize and convert best patterns to JSON
+    #json_data = [serialize_pattern(pattern) for pattern in filtered_patterns.values()]
+    #json_output = json.dumps(json_data, indent=4)
+    #upload_to_firestore(filtered_patterns)
